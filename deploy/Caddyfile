@@ -1,0 +1,22 @@
+# Proxy inverso con TLS automatico. DOMINIO=localhost usa un certificado del CA local de Caddy (el navegador pedira confiar en el);
+# con un dominio publico real, Caddy obtiene y renueva solo el certificado de Let's Encrypt (los puertos 80 y 443 deben llegar a esta maquina).
+{$DOMINIO:localhost} {
+	encode zstd gzip
+
+	# Sin TLS no hay microfono en el navegador ni datos de salud protegidos: se le dice al navegador que use siempre HTTPS.
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+
+	# Tope de subida (los documentos admiten 15 MB) y de audio por WebSocket no aplica: el WebSocket no usa cuerpo HTTP.
+	request_body {
+		max_size 20MB
+	}
+
+	# El WebSocket de voz (/api/v1/voz/ws) pasa sin configuracion extra.
+	reverse_proxy api:8000 {
+		health_uri /api/v1/health
+		health_interval 15s
+	}
+}

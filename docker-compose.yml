@@ -1,0 +1,59 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-recep}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Define POSTGRES_PASSWORD en .env}
+      POSTGRES_DB: ${POSTGRES_DB:-recep_salud}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"   # solo accesible desde esta máquina
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-recep} -d ${POSTGRES_DB:-recep_salud}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-recep}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-recep_salud}
+      OLLAMA_BASE_URL: http://host.docker.internal:11434   # Ollama corre en el equipo (usa la GPU)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:8000:8000"   # solo desde esta máquina; el mundo entra por el proxy (TLS)
+    volumes:
+      - ./data/models:/srv/data/models:ro   # Whisper y Piper (no van en la imagen)
+      - uploads:/srv/data/uploads           # documentos de la base de conocimiento
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Proxy con HTTPS: `docker compose --profile produccion up -d`. Es lo único que escucha en la red (80 y 443).
+  proxy:
+    image: caddy:2
+    profiles: ["produccion"]
+    environment:
+      DOMINIO: ${DOMINIO:-localhost}
+    ports:
+      - "${HTTP_PUERTO:-80}:80"      # cambiar solo si el 80/443 están ocupados (p. ej. IIS); los certificados de Let's Encrypt exigen 80 y 443
+      - "${HTTPS_PUERTO:-443}:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data      # certificados: no perderlos (Let's Encrypt limita las emisiones)
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  uploads:
+  caddy_data:
+  caddy_config:

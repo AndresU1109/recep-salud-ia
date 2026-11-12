@@ -1,0 +1,33 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+data/uploads/*
+data/backups/*
+!data/uploads/.gitkeep
+!data/backups/.gitkeep
+data/models/
+!data/models/.gitkeep
+
+# --- agregado al preparar el repositorio ---
+.env.*
+!.env.example
+data/logs/
+*.log
+respaldos/
+.claude/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/
+
+# notas internas de desarrollo (solo locales, no se publican)
+CONTEXTO.md
