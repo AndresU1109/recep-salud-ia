@@ -37,6 +37,61 @@ docker compose up -d db      # PostgreSQL con pgvector
 
 Requisitos: Python 3.12, Docker, Ollama con `gemma4:e4b-it-qat` y `embeddinggemma:latest`.
 
+## Cómo instalar los modelos
+
+Los modelos **no vienen en el repositorio** (pesan varios GB). Se instalan una vez; después todo funciona sin internet. Ejecute los comandos desde la carpeta del proyecto, con el entorno ya creado por `.\scripts\setup.ps1`.
+
+| Modelo | Para qué | Tamaño aprox. | Obligatorio |
+|---|---|---|---|
+| `gemma4:e4b-it-qat` (Ollama) | conversación del asistente | 6 GB | sí |
+| `embeddinggemma:latest` (Ollama) | búsqueda en documentos (RAG) | 0,6 GB | sí |
+| Whisper `small` | voz → texto | 0,5 GB | solo para voz |
+| Piper `es_MX-claude-high` | texto → voz | 63 MB | solo para voz |
+| Kokoro (3 voces en español) | texto → voz alternativa | 350 MB | no |
+
+**1. Ollama** (conversación y embeddings). Instale Ollama desde https://ollama.com/download y descargue los dos modelos:
+
+```powershell
+ollama pull gemma4:e4b-it-qat
+ollama pull embeddinggemma:latest
+```
+
+Si usa otros nombres, cámbielos en `.env` (`LLM_MODEL`, `EMBEDDING_MODEL`). El modelo de embeddings también se puede cambiar desde el panel (**Configuración de IA**), pero `EMBEDDING_DIMENSIONS` debe coincidir con la base de datos (768 por defecto).
+
+**2. Whisper** (voz → texto). La aplicación lo lee de `data/models/whisper` **sin conexión**, así que hay que descargarlo antes:
+
+```powershell
+.\.venv\Scripts\python.exe -c "from huggingface_hub import snapshot_download as s; s('Systran/faster-whisper-small', cache_dir='data/models/whisper')"
+```
+
+Para otro tamaño (`base`, `medium`…) cambie `small` en el comando y `STT_MODEL` en `.env`. Con tarjeta NVIDIA se puede usar la GPU (`STT_DEVICE=auto` y `STT_CUDA_DLL_DIRS`, ver `.env.example`); sin ella usa la CPU.
+
+**3. Piper** (voz del asistente por defecto). Descargue el archivo de voz y su ficha a `data/models/tts/piper/`:
+
+```powershell
+New-Item -ItemType Directory -Force data\models\tts\piper | Out-Null
+$u = "https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_MX/claude/high"
+Invoke-WebRequest "$u/es_MX-claude-high.onnx"      -OutFile data\models\tts\piper\es_MX-claude-high.onnx
+Invoke-WebRequest "$u/es_MX-claude-high.onnx.json" -OutFile data\models\tts\piper\es_MX-claude-high.onnx.json
+```
+
+Si falta, el asistente usa la voz de Windows como respaldo.
+
+**4. Kokoro** (opcional, más voces). Descargue el modelo y las voces a `data/models/tts/kokoro/`; el paquete `kokoro-onnx` ya viene en `requirements.txt`:
+
+```powershell
+New-Item -ItemType Directory -Force data\models\tts\kokoro | Out-Null
+$u = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0"
+Invoke-WebRequest "$u/kokoro-v1.0.onnx" -OutFile data\models\tts\kokoro\kokoro-v1.0.onnx
+Invoke-WebRequest "$u/voices-v1.0.bin"  -OutFile data\models\tts\kokoro\voices-v1.0.bin
+```
+
+Después se elige en **Configuración de IA → Voz del asistente** (Dora, Alex o Santa). Kokoro corre en CPU y tarda 1-3 s más en empezar a hablar que Piper.
+
+**Comprobar que quedaron bien:** `curl http://localhost:8000/api/v1/health/dependencias` (con el panel encendido) o las pruebas con modelos reales: `pytest -m ollama`, `-m stt` y `-m tts`.
+
+Cada modelo tiene su propia licencia (Gemma, Whisper, Piper, Kokoro): revísela antes de usarlo en un entorno real.
+
 ## Comprobar
 
 ```powershell
@@ -67,3 +122,7 @@ Por defecto todo es local (Ollama). En el panel, **Administración → Configura
 - **Encuesta:** al final de una llamada de voz el asistente pide una calificación de 1 a 5 (opcional). Resultados en **Reportes → Satisfacción**. Se apaga en Configuración de IA.
 - **Voz del asistente:** Configuración de IA → «Voz del asistente»: Piper, Kokoro (Dora, Alex, Santa; modelo en `data/models/tts/kokoro/`) o la voz de Windows, con muestra y velocidad.
 
+
+## Licencia
+
+[MIT](LICENSE). Cubre el código de este repositorio; los modelos y paquetes de terceros (Gemma, Whisper, Piper, Kokoro, `piper-tts`, etc.) conservan sus propias licencias. Todos los datos incluidos son ficticios.
